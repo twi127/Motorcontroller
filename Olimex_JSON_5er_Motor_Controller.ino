@@ -9,6 +9,18 @@
 #include <ArduinoJson.h>
 #include "FastAccelStepper.h"
 
+// Stepper Configuration Struct
+//struct StepperConfig
+//{
+//    int8_t        Command = 0;      // 0=force stop 1=stop 3=run
+//    int8_t        Direction = 1; // 1=Forward, -1=Reverse
+//    int           Speed = 0;
+//    int           Accel = 500;
+//    int           Steps = 0;
+//    int           rpm = 0;
+//    int           steps_per_rpm = 3200;
+//};
+
 TaskHandle_t update_stripe_handle; // create task handle
 TaskHandle_t status_signal_light_handle; // create task handle
 TaskHandle_t update_outputs_handle; // create task handle
@@ -77,6 +89,23 @@ FastAccelStepper* stepper2 = NULL;
 FastAccelStepper* stepper3 = NULL;
 FastAccelStepper* stepper4 = NULL;
 FastAccelStepper* stepper5 = NULL;
+
+struct StepperConfig
+{
+    int8_t        Command;      // 0=force stop 1=stop 3=run
+    int8_t        Direction; // 1=Forward, -1=Reverse
+    int           Speed;
+    int           Steps;
+    int           rpm;
+    int           Accel;
+    int           steps_per_rpm;
+};
+
+StepperConfig stepper1Config;
+StepperConfig stepper2Config;
+StepperConfig stepper3Config;
+StepperConfig stepper4Config;
+StepperConfig stepper5Config;
 
 //--- Json Definition --------------
 const int capacity = JSON_OBJECT_SIZE(7) + 4 * JSON_OBJECT_SIZE(5) + 1 * JSON_OBJECT_SIZE(8) + 1 * JSON_OBJECT_SIZE(5);
@@ -229,39 +258,39 @@ void handlePost_control() {
         select_simulation = 0; //Stop Simulation -> Overide
 
         // Motor 1
-        M1_Direction            = jsonDocument["Motor 1"]["Direction"];
-        M1_Speed                = jsonDocument["Motor 1"]["Speed"];
-        M1_Accel                = jsonDocument["Motor 1"]["Acceleration"];
-        M1_Command              = jsonDocument["Motor 1"]["Command"];
-        M1_Steps                = jsonDocument["Motor 1"]["Steps"];
+        stepper1Config.Direction            = jsonDocument["Motor 1"]["Direction"];
+        stepper1Config.Speed                = jsonDocument["Motor 1"]["Speed"];
+        stepper1Config.Accel                = jsonDocument["Motor 1"]["Acceleration"];
+        stepper1Config.Command              = jsonDocument["Motor 1"]["Command"];
+        stepper1Config.Steps                = jsonDocument["Motor 1"]["Steps"];
 
         // Motor 2
-        M2_Direction            = jsonDocument["Motor 2"]["Direction"];
-        M2_Speed                = jsonDocument["Motor 2"]["Speed"];
-        M2_Accel                = jsonDocument["Motor 2"]["Acceleration"];
-        M2_Command              = jsonDocument["Motor 2"]["Command"];
-        M2_Steps                = jsonDocument["Motor 2"]["Steps"];
+        stepper2Config.Direction            = jsonDocument["Motor 2"]["Direction"];
+        stepper2Config.Speed                = jsonDocument["Motor 2"]["Speed"];
+        stepper2Config.Accel                = jsonDocument["Motor 2"]["Acceleration"];
+        stepper2Config.Command              = jsonDocument["Motor 2"]["Command"];
+        stepper2Config.Steps                = jsonDocument["Motor 2"]["Steps"];
 
         // Motor 3
-        M3_Direction            = jsonDocument["Motor 3"]["Direction"];
-        M3_Speed                = jsonDocument["Motor 3"]["Speed"];
-        M3_Accel                = jsonDocument["Motor 3"]["Acceleration"];
-        M3_Command              = jsonDocument["Motor 3"]["Command"];
-        M3_Steps                = jsonDocument["Motor 3"]["Steps"];
+        stepper3Config.Direction            = jsonDocument["Motor 3"]["Direction"];
+        stepper3Config.Speed                = jsonDocument["Motor 3"]["Speed"];
+        stepper3Config.Accel                = jsonDocument["Motor 3"]["Acceleration"];
+        stepper3Config.Command              = jsonDocument["Motor 3"]["Command"];
+        stepper3Config.Steps                = jsonDocument["Motor 3"]["Steps"];
 
         // Motor 4
-        M4_Direction            = jsonDocument["Motor 4"]["Direction"];
-        M4_Speed                = jsonDocument["Motor 4"]["Speed"];
-        M4_Accel                = jsonDocument["Motor 4"]["Acceleration"];
-        M4_Command              = jsonDocument["Motor 4"]["Command"];
-        M4_Steps                = jsonDocument["Motor 4"]["Steps"];
+        stepper4Config.Direction            = jsonDocument["Motor 4"]["Direction"];
+        stepper4Config.Speed                = jsonDocument["Motor 4"]["Speed"];
+        stepper4Config.Accel                = jsonDocument["Motor 4"]["Acceleration"];
+        stepper4Config.Command              = jsonDocument["Motor 4"]["Command"];
+        stepper4Config.Steps                = jsonDocument["Motor 4"]["Steps"];
 
         // Motor 5
-        M5_Direction            = jsonDocument["Motor 5"]["Direction"];
-        M5_Speed                = jsonDocument["Motor 5"]["Speed"];
-        M5_Accel                = jsonDocument["Motor 5"]["Acceleration"];
-        M5_Command              = jsonDocument["Motor 5"]["Command"];
-        M5_Steps                = jsonDocument["Motor 5"]["Steps"];
+        stepper5Config.Direction            = jsonDocument["Motor 5"]["Direction"];
+        stepper5Config.Speed                = jsonDocument["Motor 5"]["Speed"];
+        stepper5Config.Accel                = jsonDocument["Motor 5"]["Acceleration"];
+        stepper5Config.Command              = jsonDocument["Motor 5"]["Command"];
+        stepper5Config.Steps                = jsonDocument["Motor 5"]["Steps"];
 
         //Serial
         debugPrintln("------- POST: Control Update -------");
@@ -600,180 +629,49 @@ void handlePost_motors() {
 }
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-void update_motors() {
+void update_motors(FastAccelStepper* stepper, struct StepperConfig& stepperConfig) {
+
+    if (!stepper)
+        return;
+
     // M_Command 0=force, Stop 1=reg, Stop 2=run cont, 3=run steps
     debugPrintln("--- Update Motors ----");
 
     //--- Motor 1------------------
-    if (M1_Command == 0) {
+    if (stepperConfig.Command == 0) {
         // Force STOP
-        stepper1->forceStop();
+        stepper->forceStop();
         debugPrintln("M1 STOP forced");
     }
-    else if (M1_Command == 1) {
+    else if (stepperConfig.Command == 1) {
         // Reg. STOP
-        stepper1->setAcceleration(M1_Accel);
-        stepper1->stopMove();
+        stepper->setAcceleration(stepperConfig.Accel);
+        stepper->stopMove();
         debugPrintln("M1 STOP reg");
     }
-    else if (M1_Command == 2) {
+    else if (stepperConfig.Command == 2) {
         // Run cont.
-        if (M1_Speed > 0 && M1_Direction == 1) {
-            stepper1->setSpeedInHz(round((M1_Speed * steps_per_rpmStepper1) / 60));
-            stepper1->setAcceleration(M1_Accel);
-            stepper1->runForward();
+        if (stepperConfig.Speed > 0 && stepperConfig.Direction == 1) {
+            stepper->setSpeedInHz(round((stepperConfig.Speed * stepperConfig.steps_per_rpm) / 60));
+            stepper->setAcceleration(stepperConfig.Accel);
+            stepper->runForward();
             debugPrintln("M1 RUN fwd");
         }
-        else if (M1_Speed > 0 && M1_Direction == -1) {
-            stepper1->setSpeedInHz(round((M1_Speed * steps_per_rpmStepper1) / 60));
-            stepper1->setAcceleration(M1_Accel);
-            stepper1->runBackward();
+        else if (stepperConfig.Speed > 0 && stepperConfig.Direction == -1) {
+            stepper->setSpeedInHz(round((stepperConfig.Speed * stepperConfig.steps_per_rpm) / 60));
+            stepper->setAcceleration(stepperConfig.Accel);
+            stepper->runBackward();
             debugPrintln("M1 RUN rev");
         }
     }
-    else if (M1_Command == 3) {
+    else if (stepperConfig.Command == 3) {
         // Run Steps
-        stepper1->setSpeedInHz(round((M1_Speed * steps_per_rpmStepper1) / 60));
-        stepper1->setAcceleration(M1_Accel);
-        stepper1->move(M1_Steps);
+        stepper->setSpeedInHz(round((stepperConfig.Speed * stepperConfig.steps_per_rpm) / 60));
+        stepper->setAcceleration(stepperConfig.Accel);
+        stepper->move(stepperConfig.Steps);
     }
 
 
-    //--- Motor 2------------------
-    if (M2_Command == 0) {
-        // Force STOP
-        stepper2->forceStop();
-        debugPrintln("M2 STOP forced");
-    }
-    else if (M2_Command == 1) {
-        // Reg. STOP
-        stepper2->setAcceleration(M2_Accel);
-        stepper2->stopMove();
-        debugPrintln("M2 STOP reg");
-    }
-    else if (M2_Command == 2) {
-        // Run cont.
-        if (M2_Speed > 0 && M2_Direction == 1) {
-            stepper2->setSpeedInHz(round((M2_Speed * steps_per_rpmStepper2) / 60));
-            stepper2->setAcceleration(M2_Accel);
-            stepper2->runForward();
-            debugPrintln("M2 RUN fwd");
-        }
-        else if (M2_Speed > 0 && M2_Direction == -1) {
-            stepper2->setSpeedInHz(round((M2_Speed * steps_per_rpmStepper2) / 60));
-            stepper2->setAcceleration(M2_Accel);
-            stepper2->runBackward();
-            debugPrintln("M2 RUN rev");
-        }
-    }
-    else if (M2_Command == 3) {
-        // Run Steps
-        stepper2->setSpeedInHz(round((M2_Speed * steps_per_rpmStepper2) / 60));
-        stepper2->setAcceleration(M2_Accel);
-        stepper2->move(M2_Steps);
-    }
-
-    //--- Motor 3------------------
-    if (M3_Command == 0) {
-        // Force STOP
-        stepper3->forceStop();
-        debugPrintln("M3 STOP forced");
-    }
-    else if (M3_Command == 1) {
-        // Reg. STOP
-        stepper3->setAcceleration(M3_Accel);
-        stepper3->stopMove();
-        debugPrintln("M3 STOP reg");
-    }
-    else if (M3_Command == 2) {
-        // Run cont.
-        if (M3_Speed > 0 && M3_Direction == 1) {
-            stepper3->setSpeedInHz(round((M3_Speed * steps_per_rpmStepper3) / 60));
-            stepper3->setAcceleration(M3_Accel);
-            stepper3->runForward();
-            debugPrintln("M3 RUN fwd");
-        }
-        else if (M3_Speed > 0 && M3_Direction == -1) {
-            stepper3->setSpeedInHz(round((M3_Speed * steps_per_rpmStepper3) / 60));
-            stepper3->setAcceleration(M3_Accel);
-            stepper3->runBackward();
-            debugPrintln("M3 RUN rev");
-        }
-    }
-    else if (M3_Command == 3) {
-        // Run Steps
-        stepper3->setSpeedInHz(round((M3_Speed * steps_per_rpmStepper3) / 60));
-        stepper3->setAcceleration(M3_Accel);
-        stepper3->move(M3_Steps);
-    }
-
-    //--- Motor 4------------------
-    if (M4_Command == 0) {
-        // Force STOP
-        stepper4->forceStop();
-        debugPrintln("M4 STOP forced");
-    }
-    else if (M4_Command == 1) {
-        // Reg. STOP
-        stepper4->setAcceleration(M4_Accel);
-        stepper4->stopMove();
-        debugPrintln("M4 STOP reg");
-    }
-    else if (M4_Command == 2) {
-        // Run cont.
-        if (M4_Speed > 0 && M4_Direction == 1) {
-            stepper4->setSpeedInHz(round((M4_Speed * steps_per_rpmStepper4) / 60));
-            stepper4->setAcceleration(M4_Accel);
-            stepper4->runForward();
-            debugPrintln("M4 RUN fwd");
-        }
-        else if (M4_Speed > 0 && M4_Direction == -1) {
-            stepper4->setSpeedInHz(round((M4_Speed * steps_per_rpmStepper4) / 60));
-            stepper4->setAcceleration(M4_Accel);
-            stepper4->runBackward();
-            debugPrintln("M4 RUN rev");
-        }
-    }
-    else if (M4_Command == 3) {
-        // Run Steps
-        stepper4->setSpeedInHz(round((M4_Speed * steps_per_rpmStepper4) / 60));
-        stepper4->setAcceleration(M4_Accel);
-        stepper4->move(M4_Steps);
-    }
-
-    //--- Motor 5------------------
-    if (M5_Command == 0) {
-        // Force STOP
-        stepper5->forceStop();
-        debugPrintln("M5 STOP forced");
-    }
-    else if (M5_Command == 1) {
-        // Reg. STOP
-        stepper5->setAcceleration(M5_Accel);
-        stepper5->stopMove();
-        debugPrintln("M5 STOP reg");
-    }
-    else if (M5_Command == 2) {
-        // Run cont.
-        if (M5_Speed > 0 && M5_Direction == 1) {
-            stepper5->setSpeedInHz(round((M5_Speed * steps_per_rpmStepper5) / 60));
-            stepper5->setAcceleration(M5_Accel);
-            stepper5->runForward();
-            debugPrintln("M5 RUN fwd");
-        }
-        else if (M5_Speed > 0 && M5_Direction == -1) {
-            stepper5->setSpeedInHz(round((M5_Speed * steps_per_rpmStepper5) / 60));
-            stepper5->setAcceleration(M5_Accel);
-            stepper5->runBackward();
-            debugPrintln("M5 RUN rev");
-        }
-    }
-    else if (M5_Command == 3) {
-        // Run Steps
-        stepper5->setSpeedInHz(round((M5_Speed * steps_per_rpmStepper5) / 60));
-        stepper5->setAcceleration(M5_Accel);
-        stepper5->move(M5_Steps);
-    }
 }
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 void run_simulation(void* parameter) {
@@ -1425,7 +1323,11 @@ void loop() {
     server.handleClient();
 
     if (upd_motors == true) {
-        update_motors();
+        update_motors(stepper1, stepper1Config);
+        update_motors(stepper2, stepper2Config);
+        update_motors(stepper3, stepper3Config);
+        update_motors(stepper4, stepper4Config);
+        update_motors(stepper5, stepper5Config);
         upd_motors = false;
     }
     else {
